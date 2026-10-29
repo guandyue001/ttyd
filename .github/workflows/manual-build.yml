@@ -9,7 +9,26 @@ on:
 
 jobs:
   build:
-    uses: ./.github/workflows/backend.yml
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        target: [x86_64, aarch64]
+    steps:
+      - uses: actions/checkout@v6
+      - name: 安装依赖
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y autoconf automake build-essential cmake curl file libtool
+      - name: 交叉编译 ${{ matrix.target }}
+        env:
+          BUILD_TARGET: ${{ matrix.target }}
+        run: ./scripts/cross-build.sh
+      - uses: actions/upload-artifact@v7
+        with:
+          name: ttyd.${{ matrix.target }}
+          path: build/ttyd*
+
   publish:
     needs: [build]
     runs-on: ubuntu-24.04
@@ -33,7 +52,6 @@ jobs:
           mkdir -p out
           for file in ttyd.*/*; do
             target=$(echo "$file" | awk -F/ '{print $1}')
-            [[ "$file" == *.exe ]] && target="$target.exe"
             mv "$file" "out/$target"
           done
           (cd out && sha256sum ttyd.* > SHA256SUMS)
