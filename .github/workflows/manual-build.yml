@@ -1,0 +1,46 @@
+name: manual build
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: '发布版本号（留空则自动用 CMakeLists.txt 里的 1.7.7）'
+        required: false
+
+jobs:
+  build:
+    uses: ./.github/workflows/backend.yml
+  publish:
+    needs: [build]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v6
+      - name: 读取版本号
+        id: ver
+        run: |
+          if [ -n "${{ github.event.inputs.version }}" ]; then
+            V="${{ github.event.inputs.version }}"
+          else
+            V=$(grep -m1 'project(ttyd' CMakeLists.txt | awk '{print $4}')
+          fi
+          echo "version=$V" >> $GITHUB_OUTPUT
+          echo "将发布版本: $V"
+      - uses: actions/download-artifact@v8
+      - name: 整理产物
+        run: |
+          mkdir -p out
+          for file in ttyd.*/*; do
+            target=$(echo "$file" | awk -F/ '{print $1}')
+            [[ "$file" == *.exe ]] && target="$target.exe"
+            mv "$file" "out/$target"
+          done
+          (cd out && sha256sum ttyd.* > SHA256SUMS)
+      - uses: ncipollo/release-action@v1
+        with:
+          tag: ${{ steps.ver.outputs.version }}
+          name: ${{ steps.ver.outputs.version }}
+          artifacts: out/*
+          allowUpdates: true
+          generateReleaseNotes: true
